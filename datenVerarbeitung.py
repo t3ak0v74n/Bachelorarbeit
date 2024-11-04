@@ -9,19 +9,27 @@ import numpy as np
 import tensorflow as tf
 from tensorflow import keras
 from sklearn.model_selection import train_test_split
+import matplotlib.pyplot as plt
+import json
 
 
 
 # time interval
 end_date = datetime(2022, 8, 25, 12, 37, tzinfo=timezone.utc)  # datetime.utcnow()-timedelta(days=0.5)#
-start_date = end_date - timedelta(days=5)
+start_date = end_date - timedelta(days=20)
 
 '''# Load data (deserialize)
 with open('gps_measurements.pickle', 'rb') as handle:
     gps_measurements = pickle.load(handle)'''
 
+with open("UserDataIRS.json" , "r") as UD_IRS:
+    userDataIRS = json.load(UD_IRS)
+
+userIRS= userDataIRS['user']
+password=userDataIRS['pw']
+
 # get archive, fetch data
-tm_archive = TmArchiveGet(ip="https://tm.buggy.irs.uni-stuttgart.de", user="xxx", pw="xxx")
+tm_archive = TmArchiveGet(ip="https://tm.buggy.irs.uni-stuttgart.de", user= userIRS, pw= password)
 tm_ses = tm_archive.createSession()
 
 print("fetching between %s and %s" % (start_date, end_date))
@@ -107,54 +115,16 @@ for i in range(len(gps_times)):
 #print(combined_data)
 
 
-"""time_sequence = []
-
-sequence_length = timedelta(minutes=90)  # Duration of each sequence
-overlap = timedelta(minutes=15)
-
-start_time = gps_times[0]['Timestamp']
-
-# Assuming 'manipulated_data' is your current pandas DataFrame"""
-"""def create_overlapping_sequences_from_list(data, window_size, stride):
-    sequences = []
-    for start in range(0, len(data) - window_size + 1, stride):
-        sequence = data[start:start + window_size]
-        sequences.append(sequence)
-    return sequences
-
-# Example usage
-window_size = 90  # Adjust this value based on your needs
-stride = 80     # Adjust this value based on the desired overlap
-
-
-# Now 'overlapping_sequences' is a list of sequences, each of which is a sub-list of your original data
-
-
-# Use your updated DataFrame name
-overlapping_sequences = create_overlapping_sequences_from_list(combined_data, window_size, stride)
-
-# Now 'overlapping_sequences' is a list of DataFrames, each representing a sequence
-#print(len(gps_times))
-print(len(combined_data))
-for sequence in overlapping_sequences:
-    #print(sequence)
-    i= 0
-print(len(overlapping_sequences))
-
-"""
-
-# Example data structure: [(t1, [x1, y1, z1], [vx1, vy1, vz1]), ...]
-# Flattened structure: [x1, y1, z1, vx1, vy1, vz1]
 def flatten_data(data):
     return np.array([[*position, *velocity] for _, position, velocity in data])
 
-# Your data (replace 'manipulated_data' with your actual data)
+# Flatten the data
 flattened_data = flatten_data(combined_data)
 
 # Parameters
-window_size = 90
-stride = window_size - 10  # Adjust to overlap the last 10 points
-target_size = 90  # Predict the next 90 minutes
+window_size = 90  # Number of time steps in the input
+target_size = 10  # Number of time steps to predict
+stride = 10       # Step size for overlapping sequences
 
 # Create sequences and targets
 def create_sequences(data, window_size, target_size, stride):
@@ -174,12 +144,12 @@ X, y = create_sequences(flattened_data, window_size, target_size, stride)
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Reshape X for the LSTM: (samples, time steps, features)
-X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 6))
+X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 6))  # 6 features: x, y, z, vx, vy, vz
 X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 6))
 
 # Build the LSTM model
 model = keras.Sequential([
-    keras.layers.LSTM(50, return_sequences=True, input_shape=(window_size, 6)),
+    keras.layers.LSTM(100, return_sequences=True, input_shape=(window_size, 6)),
     keras.layers.LSTM(50, return_sequences=False),
     keras.layers.Dense(target_size * 6),  # Output layer to predict next 90 steps with 6 features each
     keras.layers.Reshape((target_size, 6))  # Reshape output to (90, 6)
@@ -188,8 +158,8 @@ model = keras.Sequential([
 # Compile the model
 model.compile(optimizer='adam', loss='mse')
 
-# Train the model
-history = model.fit(X_train, y_train, epochs=20, batch_size=32, validation_split=0.2)
+# Train the model without EarlyStopping
+history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2, verbose=1)
 
 # Evaluate the model
 loss = model.evaluate(X_test, y_test)
@@ -198,10 +168,6 @@ print("Test Loss:", loss)
 # Make predictions
 predictions = model.predict(X_test)
 
-
-import matplotlib.pyplot as plt
-
-# Assuming 'history' is the object returned by model.fit()
 # Plotting training and validation loss
 plt.figure(figsize=(12, 6))
 plt.plot(history.history['loss'], label='Training Loss', color='blue')
