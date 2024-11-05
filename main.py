@@ -16,7 +16,7 @@ with open('gps_measurements.pickle', 'rb') as handle:
     gps_measurements = pickle.load(handle)'''
 
 # get archive, fetch data
-tm_archive = TmArchiveGet(ip="https://tm.buggy.irs.uni-stuttgart.de", user="flpops", pw="flpops")
+tm_archive = TmArchiveGet(ip="https://tm.buggy.irs.uni-stuttgart.de", user="xxx", pw="xxx")
 tm_ses = tm_archive.createSession()
 
 print("fetching between %s and %s" % (start_date, end_date))
