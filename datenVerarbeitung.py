@@ -16,7 +16,7 @@ import seaborn as sns
 
 # time interval
 end_date = datetime(2022, 8, 25, 12, 37, tzinfo=timezone.utc)  # datetime.utcnow()-timedelta(days=0.5)#
-start_date = end_date - timedelta(days=20)
+start_date = end_date - timedelta(days=1)
 
 '''# Load data (deserialize)
 with open('gps_measurements.pickle', 'rb') as handle:
@@ -104,29 +104,18 @@ for i in range(len(gps_positions)):
     positions_eci.append(pos_eci)
     velocities_eci.append(vel_eci)
 
-#print(gps_times)
-#print(positions_eci)
-#print(velocities_eci)
 
-combined_data = []
+
+combined_array = []
 
 for i in range(len(gps_times)):
-   combined_data.append((gps_times[i], positions_eci[i], velocities_eci[i]))
-#print(combined_data)
+   combined_array.append(np.concatenate((positions_eci[i], velocities_eci[i])))
 
 
-def flatten_data(data):
-    return np.array([[*position, *velocity] for _, position, velocity in data])
+combined_data = np.array(combined_array)
 
-# Flatten the data
-flattened_data = flatten_data(combined_data)
-
-print(len(flattened_data))
-#print(combined_data)
-#print(flattened_data)
-
-scaler= StandardScaler().fit(flattened_data)
-df_data_scaled= scaler.transform(flattened_data)
+scaler= StandardScaler().fit(combined_data)
+df_data_scaled= scaler.transform(combined_data)
 
 #training data
 trainX=[]
@@ -138,13 +127,13 @@ n_future= 90
 n_past= 360
 
 for i in range(n_past, len(df_data_scaled) - n_future+1):
-    trainX.append(df_data_scaled[i-n_past:i, 0:flattened_data.shape[1]])
+    trainX.append(df_data_scaled[i-n_past:i, 0:combined_data.shape[1]])
     trainY.append(df_data_scaled[i+n_future -1: i+n_future,0])
 
 trainX, trainY = np.array(trainX), np.array(trainY)
 
-print('trainX shape == {}'.format(trainX.shape))
-print('trainY shape == {}'.format(trainY.shape))
+#print('trainX shape == {}'.format(trainX.shape))
+#print('trainY shape == {}'.format(trainY.shape))
 
 model = Sequential()
 model.add(LSTM(128, activation="relu", input_shape=(trainX.shape[1], trainX.shape[2]), return_sequences=True))
@@ -153,9 +142,9 @@ model.add(Dropout(0.2))
 model.add(Dense(trainY.shape[1]))
 
 model.compile(optimizer='adam', loss= 'mse')
-model.summary()
+#model.summary()
 
-history = model.fit(trainX, trainY, epochs=50, batch_size=16, validation_split=0.2)
+#history = model.fit(trainX, trainY, epochs=50, batch_size=16, validation_split=0.2)
 
 plt.plot(history.history['loss'], label= "Training loss")
 plt.plot(history.history['val_loss'], label= "Validation loss")
