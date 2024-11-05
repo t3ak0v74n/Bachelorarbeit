@@ -1,17 +1,17 @@
 from tmApiClient import TmArchiveGet
 import pandas as pd
-import pickle
 from datetime import datetime, timezone, timedelta
 from astropy import units as u
 from astropy import coordinates as coord
 from astropy.time import Time
 import numpy as np
-import tensorflow as tf
-from tensorflow import keras
-from sklearn.model_selection import train_test_split
-import matplotlib.pyplot as plt
 import json
-
+import tensorflow
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from matplotlib import pyplot as plt
+from sklearn.preprocessing import StandardScaler
+import seaborn as sns
 
 
 # time interval
@@ -121,60 +121,44 @@ def flatten_data(data):
 # Flatten the data
 flattened_data = flatten_data(combined_data)
 
-# Parameters
-window_size = 90  # Number of time steps in the input
-target_size = 10  # Number of time steps to predict
-stride = 10       # Step size for overlapping sequences
+print(len(flattened_data))
+#print(combined_data)
+#print(flattened_data)
 
-# Create sequences and targets
-def create_sequences(data, window_size, target_size, stride):
-    sequences = []
-    targets = []
-    for start in range(0, len(data) - window_size - target_size + 1, stride):
-        sequence = data[start:start + window_size]
-        target = data[start + window_size:start + window_size + target_size]
-        sequences.append(sequence)
-        targets.append(target)
-    return np.array(sequences), np.array(targets)
+scaler= StandardScaler().fit(flattened_data)
+df_data_scaled= scaler.transform(flattened_data)
 
-# Generate sequences and targets
-X, y = create_sequences(flattened_data, window_size, target_size, stride)
+#training data
+trainX=[]
+#test data
+trainY= []
 
-# Split into training and testing sets
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+#should predict one orbit
+n_future= 90
+n_past= 360
 
-# Reshape X for the LSTM: (samples, time steps, features)
-X_train = X_train.reshape((X_train.shape[0], X_train.shape[1], 6))  # 6 features: x, y, z, vx, vy, vz
-X_test = X_test.reshape((X_test.shape[0], X_test.shape[1], 6))
+for i in range(n_past, len(df_data_scaled) - n_future+1):
+    trainX.append(df_data_scaled[i-n_past:i, 0:flattened_data.shape[1]])
+    trainY.append(df_data_scaled[i+n_future -1: i+n_future,0])
 
-# Build the LSTM model
-model = keras.Sequential([
-    keras.layers.LSTM(100, return_sequences=True, input_shape=(window_size, 6)),
-    keras.layers.LSTM(50, return_sequences=False),
-    keras.layers.Dense(target_size * 6),  # Output layer to predict next 90 steps with 6 features each
-    keras.layers.Reshape((target_size, 6))  # Reshape output to (90, 6)
-])
+trainX, trainY = np.array(trainX), np.array(trainY)
 
-# Compile the model
-model.compile(optimizer='adam', loss='mse')
+print('trainX shape == {}'.format(trainX.shape))
+print('trainY shape == {}'.format(trainY.shape))
 
-# Train the model without EarlyStopping
-history = model.fit(X_train, y_train, epochs=50, batch_size=32, validation_split=0.2, verbose=1)
+model = Sequential()
+model.add(LSTM(128, activation="relu", input_shape=(trainX.shape[1], trainX.shape[2]), return_sequences=True))
+model.add(LSTM(64, activation="relu", return_sequences=False))
+model.add(Dropout(0.2))
+model.add(Dense(trainY.shape[1]))
 
-# Evaluate the model
-loss = model.evaluate(X_test, y_test)
-print("Test Loss:", loss)
+model.compile(optimizer='adam', loss= 'mse')
+model.summary()
 
-# Make predictions
-predictions = model.predict(X_test)
+history = model.fit(trainX, trainY, epochs=50, batch_size=16, validation_split=0.2)
 
-# Plotting training and validation loss
-plt.figure(figsize=(12, 6))
-plt.plot(history.history['loss'], label='Training Loss', color='blue')
-plt.plot(history.history['val_loss'], label='Validation Loss', color='orange')
-plt.title('Training and Validation Loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
+plt.plot(history.history['loss'], label= "Training loss")
+plt.plot(history.history['val_loss'], label= "Validation loss")
 plt.legend()
-plt.grid()
 plt.show()
+
